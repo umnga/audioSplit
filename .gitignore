@@ -1,3 +1,44 @@
-venv/
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
 
-.DS_Store
+# Virtual environments
+.venv/
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Secrets / env
+.env
+.env.*
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# Node / frontend
+node_modules/
+.next/
+dist/
+.parcel-cache
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+Thumbs.db
+
+# Large model / checkpoints
+*.th
+models/
+GITIGNORE
