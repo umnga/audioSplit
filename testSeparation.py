@@ -2,6 +2,7 @@ import os
 import torch
 from demucs import pretrained
 from demucs.apply import apply_model
+import soundfile as sf
 import torchaudio
 
 def separate_audio(input_file, output_dir="separated"):
@@ -20,7 +21,11 @@ def separate_audio(input_file, output_dir="separated"):
     model.eval()
     
     print("Loading audio...")
-    wav, sr = torchaudio.load(input_file)
+    wav, sr = sf.read(input_file)
+    import numpy as np
+    if wav.ndim == 1:
+        wav = np.expand_dims(wav, axis=1)
+    wav = torch.from_numpy(wav.T).float()  # shape (channels, samples)
     if sr != model.samplerate:
         wav = torchaudio.functional.resample(wav, sr, model.samplerate)
     wav = wav.unsqueeze(0).to(device)
@@ -34,7 +39,7 @@ def separate_audio(input_file, output_dir="separated"):
     source_names = model.sources
     
     for i, name in enumerate(source_names):
-        output_file = os.path.join(output_dir, f"{name}.wav")
+        output_file = os.path.join(output_dir, f"{name}.mp3")
         # sources[0, i] is (channels, samples), torchaudio expects (channels, samples)
         torchaudio.save(output_file, sources[0, i], model.samplerate)
         print(f"Saved: {output_file}")

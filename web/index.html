@@ -1,0 +1,379 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AudioSplit</title>
+      <style>
+      :root{
+        --bg:#0f1724; --card:#0b1220; --muted:#9aa4b2; --accent:#7c5cff; --glass: rgba(255,255,255,0.03);
+        --btn-bg: linear-gradient(90deg,var(--accent),#5de0ff);
+        --btn-plain: rgba(255,255,255,0.03);
+      }
+      html,body{height:100%;}
+      body { margin:0; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; background: linear-gradient(180deg,#071024 0%, #071420 60%); color:#e6eef8; display:flex; align-items:center; justify-content:center; }
+      .card{width:min(820px,94vw); background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px; box-shadow:0 6px 24px rgba(2,6,23,0.6); padding:28px;}
+      h1{margin:0 0 6px; font-size:20px}
+      p.lead{margin:0 0 18px; color:var(--muted)}
+      .row{display:flex; gap:12px; align-items:center}
+      .filebox{flex:1; background:var(--glass); border-radius:8px; padding:12px; display:flex; gap:12px; align-items:center}
+      input[type=file]{border-radius:6px}
+  button.primary{background:var(--btn-bg); color:#051018; border:none; padding:10px 14px; border-radius:8px; cursor:pointer; font-weight:600}
+  .btn{background:var(--btn-plain); border:1px solid rgba(255,255,255,0.04); color:var(--muted); padding:8px 10px; border-radius:8px; cursor:pointer}
+  .btn.small{padding:6px 8px; font-size:13px}
+  .btn.primary{background:var(--btn-bg); color:#051018; border:none}
+  .btn.active{outline:2px solid rgba(255,255,255,0.04)}
+      button.primary[disabled]{opacity:0.6; cursor:not-allowed}
+      #status{margin-top:14px; color:var(--muted); min-height:22px}
+  .stems{margin-top:18px; display:flex; flex-direction:column; gap:10px}
+  .stem{background:rgba(255,255,255,0.02); padding:10px; border-radius:8px; display:flex; gap:12px; align-items:center}
+  .stem .meta{flex:0 0 120px}
+  .stem .wavewrap{flex:1; min-width:160px}
+  .stem .controls{flex:0 0 220px; display:flex; gap:8px; align-items:center; justify-content:flex-end}
+      .stem strong{font-size:14px}
+      audio{max-width:320px}
+      .spinner{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,0.12);border-top-color:var(--accent); animation:spin 1s linear infinite; display:inline-block; vertical-align:middle}
+      @keyframes spin{to{transform:rotate(360deg)}}
+      footer{margin-top:18px;color:var(--muted); font-size:13px}
+      @media(max-width:520px){audio{max-width:220px}}
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>AudioSplit</h1>
+      <p class="lead">Upload a .mp3 or .wav file and get separated stems (vocals, drums, bass, other). Minimal, fast, and private.</p>
+
+      <div class="row">
+        <div class="filebox" id="dropZone">
+          <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <input id="file" type="file" accept="audio/*" style="display:none" />
+              <button id="browse" class="primary" aria-label="Choose file">Browse files</button>
+              <div id="fileName" style="color:var(--muted);font-size:13px">No file selected</div>
+            </div>
+            <div style="color:var(--muted); font-size:13px">Or drag & drop audio here (mp3 or wav). Max file size depends on server.</div>
+          </div>
+        </div>
+        <button id="upload" class="primary">Upload & Separate</button>
+      </div>
+
+      <div id="status"></div>
+      <div id="uploadProgress" style="margin-top:10px; display:none">
+        <div style="height:8px; background:rgba(255,255,255,0.04); border-radius:6px; overflow:hidden">
+          <div id="uploadBar" style="height:8px; width:0%; background:linear-gradient(90deg,var(--accent),#5de0ff);"></div>
+        </div>
+        <div id="uploadPct" style="color:var(--muted); font-size:13px; margin-top:6px">&nbsp;</div>
+      </div>
+
+      <div id="mainWave" style="margin-top:16px">
+        <!-- main waveform preview will be inserted here -->
+      </div>
+      <div id="masterControls" style="margin-top:10px; display:flex; gap:8px; align-items:center">
+        <!-- master play/pause will be inserted by script -->
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-top:8px; color:var(--muted); font-size:13px">
+        <div id="timeCurrent">0:00</div>
+        <div id="timeDuration">0:00</div>
+      </div>
+
+  <div class="stems" id="stems"></div>
+
+      <footer>Files are processed on the server. Keep local copies of originals.</footer>
+    </div>
+
+  <script src="https://unpkg.com/wavesurfer.js/dist/wavesurfer.min.js"></script>
+  <script>
+      const uploadBtn = document.getElementById('upload')
+      const fileInput = document.getElementById('file')
+      const statusEl = document.getElementById('status')
+      const stemsEl = document.getElementById('stems')
+      const fileNameEl = document.getElementById('fileName')
+      const mainWaveEl = document.getElementById('mainWave')
+
+      let mainWave = null
+      const stemWaves = []
+
+      function createWave(container, color='#7c5cff', height=80){
+        // container: DOM element
+        const wave = WaveSurfer.create({
+          container: container,
+          waveColor: 'rgba(255,255,255,0.08)',
+          progressColor: color,
+          cursorColor: 'rgba(255,255,255,0.6)',
+          height: height,
+          barWidth: 2,
+          responsive: true,
+        })
+        return wave
+      }
+
+      // Toast helper
+      function showToast(msg, type='info'){
+        const t = document.createElement('div')
+        t.textContent = msg
+        t.style.background = type === 'error' ? 'rgba(255,80,80,0.12)' : 'rgba(255,255,255,0.03)'
+        t.style.border = '1px solid rgba(255,255,255,0.04)'
+        t.style.padding = '8px 12px'
+        t.style.borderRadius = '8px'
+        t.style.color = 'var(--muted)'
+        t.style.position = 'fixed'
+        t.style.right = '20px'
+        t.style.top = (20 + (document.querySelectorAll('.toast').length * 56)) + 'px'
+        t.className = 'toast'
+        document.body.appendChild(t)
+        setTimeout(()=>{ t.style.opacity = '0'; setTimeout(()=>t.remove(),300) }, 4000)
+      }
+
+      // Wire browse button
+      document.getElementById('browse').addEventListener('click', ()=> fileInput.click())
+
+      // Drag & drop
+      const dropZone = document.getElementById('dropZone')
+      ;['dragenter','dragover'].forEach(evt=> dropZone.addEventListener(evt, e=>{ e.preventDefault(); dropZone.style.boxShadow='inset 0 0 0 2px rgba(124,92,255,0.12)'; }))
+      ;['dragleave','drop'].forEach(evt=> dropZone.addEventListener(evt, e=>{ e.preventDefault(); dropZone.style.boxShadow='none'; }))
+      dropZone.addEventListener('drop', e=>{
+        const f = e.dataTransfer.files[0]
+        if (!f) return
+        fileInput.files = e.dataTransfer.files
+        fileInput.dispatchEvent(new Event('change'))
+      })
+
+      fileInput.addEventListener('change', ()=>{
+        const f = fileInput.files[0]
+        fileNameEl.textContent = f ? `${f.name} • ${(f.size/1024/1024).toFixed(2)} MB` : 'No file selected'
+        // preview main waveform immediately
+        if (f){
+          // clear previous
+          mainWaveEl.innerHTML = ''
+          if (mainWave){ mainWave.destroy(); mainWave = null }
+          const container = document.createElement('div')
+          container.style.borderRadius = '8px'
+          container.style.overflow = 'hidden'
+          mainWaveEl.appendChild(container)
+          mainWave = createWave(container, '#5de0ff', 100)
+          mainWave.loadBlob(f)
+          // update duration when ready
+          mainWave.on('ready', ()=>{
+            const dur = mainWave.getDuration() || 0
+            document.getElementById('timeDuration').textContent = formatTime(dur)
+          })
+          // update current time during playback
+          mainWave.on('audioprocess', ()=>{
+            document.getElementById('timeCurrent').textContent = formatTime(mainWave.getCurrentTime() || 0)
+          })
+          mainWave.on('seek', ()=>{
+            document.getElementById('timeCurrent').textContent = formatTime(mainWave.getCurrentTime() || 0)
+          })
+        }
+      })
+
+      // add zoom control
+      const zoomControl = document.createElement('input')
+      zoomControl.type = 'range'
+      zoomControl.min = 1
+      zoomControl.max = 300
+      zoomControl.value = 100
+      zoomControl.style.width = '220px'
+      zoomControl.style.marginLeft = '12px'
+      document.querySelector('.row').appendChild(zoomControl)
+      zoomControl.addEventListener('input', ()=>{
+        const v = Number(zoomControl.value)
+        if (mainWave && mainWave.zoom) mainWave.zoom(v)
+      })
+
+      // master play/pause control
+      const masterControls = document.getElementById('masterControls')
+      const masterPlay = document.createElement('button')
+      masterPlay.className = 'btn primary'
+      masterPlay.textContent = '▶ Play all'
+      masterPlay.style.fontWeight = '700'
+      masterControls.appendChild(masterPlay)
+
+      function anyPlaying(){
+        if (mainWave && mainWave.isPlaying && mainWave.isPlaying()) return true
+        return stemWaves.some(w=> w && w.isPlaying && w.isPlaying())
+      }
+      function playAll(){
+        // naive sync: start all at same time
+        if (mainWave && !mainWave.isPlaying()) try{ mainWave.play() }catch(e){}
+        stemWaves.forEach(w=>{ try{ if (!w.isPlaying()) w.play() }catch(e){} })
+        masterPlay.textContent = '⏸ Pause all'
+      }
+      function pauseAll(){
+        if (mainWave && mainWave.isPlaying()) try{ mainWave.pause() }catch(e){}
+        stemWaves.forEach(w=>{ try{ if (w.isPlaying()) w.pause() }catch(e){} })
+        masterPlay.textContent = '▶ Play all'
+      }
+      masterPlay.addEventListener('click', ()=>{
+        if (anyPlaying()) pauseAll()
+        else playAll()
+      })
+
+      uploadBtn.addEventListener('click', async () => {
+        const file = fileInput.files[0]
+        if (!file) return alert('Choose a file first')
+        uploadBtn.disabled = true
+        statusEl.innerHTML = '<span class="spinner"></span> Uploading...'
+        stemsEl.innerHTML = ''
+        // show progress UI
+        document.getElementById('uploadProgress').style.display = 'block'
+        try{
+          const data = await uploadWithProgress(file, (pct)=>{
+            document.getElementById('uploadBar').style.width = pct + '%'
+            document.getElementById('uploadPct').textContent = pct.toFixed(0) + '% uploaded'
+          })
+          const jobId = data.job_id
+          statusEl.innerHTML = `<span class="spinner"></span> Processing… (job ${jobId})`
+          // hide progress when upload completes
+          document.getElementById('uploadProgress').style.display = 'none'
+          pollStatus(jobId)
+        }catch(e){
+          statusEl.textContent = 'Upload failed: ' + e.message
+          uploadBtn.disabled = false
+          document.getElementById('uploadProgress').style.display = 'none'
+        }
+      })
+
+      function uploadWithProgress(file, onProgress){
+        return new Promise((resolve, reject)=>{
+          const xhr = new XMLHttpRequest()
+          const form = new FormData()
+          form.append('file', file)
+          xhr.open('POST', '/upload')
+          xhr.upload.onprogress = function(e){
+            if (e.lengthComputable){
+              const pct = (e.loaded / e.total) * 100
+              onProgress(pct)
+            }
+          }
+          xhr.onload = function(){
+            if (xhr.status >= 200 && xhr.status < 300){
+              try{ const data = JSON.parse(xhr.responseText); resolve(data) }catch(err){ reject(err) }
+            }else{
+              reject(new Error('Upload failed with status ' + xhr.status))
+            }
+          }
+          xhr.onerror = function(){ reject(new Error('Network error')) }
+          xhr.send(form)
+        })
+      }
+
+      async function pollStatus(jobId) {
+        try{
+          const res = await fetch('/status/' + jobId)
+          if (!res.ok) { statusEl.textContent = 'Status error'; uploadBtn.disabled=false; return }
+          const data = await res.json()
+          if (data.status === 'processing' || data.status === 'pending') {
+            statusEl.innerHTML = `<span class="spinner"></span> Processing… (job ${jobId})`
+            setTimeout(() => pollStatus(jobId), 2000)
+            return
+          }
+          if (data.status === 'error') {
+            statusEl.textContent = 'Error: ' + data.error
+            uploadBtn.disabled = false
+            return
+          }
+          if (data.status === 'done') {
+            statusEl.textContent = 'Done — play or download stems below'
+            uploadBtn.disabled = false
+            // clear previous stems and destroy waves
+            stemWaves.forEach(w=>w.destroy && w.destroy())
+            stemWaves.length = 0
+            stemsEl.innerHTML = ''
+            // color map for stems
+            const colorMap = {vocals:'#7c5cff', drums:'#ff6b6b', bass:'#ffd166', other:'#4ade80'}
+            for (const s of data.stems) {
+              const url = `/download/${jobId}/${encodeURIComponent(s)}`
+              const div = document.createElement('div')
+              div.className = 'stem'
+              const info = document.createElement('div')
+              info.innerHTML = `<strong>${s}</strong><div style="color:var(--muted);font-size:13px">${url}</div>`
+              const waveContainer = document.createElement('div')
+              waveContainer.className = 'wavewrap'
+              const playBtn = document.createElement('button')
+              playBtn.textContent = 'Play'
+              playBtn.className = 'btn small'
+                // mute and solo buttons
+                const muteBtn = document.createElement('button')
+                muteBtn.textContent = 'Mute'
+                muteBtn.className = 'btn small mute-btn'
+                const soloBtn = document.createElement('button')
+                soloBtn.textContent = 'Solo'
+                soloBtn.className = 'btn small solo-btn'
+                soloBtn.dataset.soloed = '0'
+              const meta = document.createElement('div')
+              meta.className = 'meta'
+              meta.innerHTML = `<strong>${s}</strong><div style="color:var(--muted);font-size:13px">${url}</div>`
+              const controlsWrap = document.createElement('div')
+              controlsWrap.className = 'controls'
+              controlsWrap.appendChild(playBtn)
+              controlsWrap.appendChild(muteBtn)
+              controlsWrap.appendChild(soloBtn)
+              // download button
+              const dl = document.createElement('a')
+              dl.href = url
+              dl.textContent = 'Download'
+              dl.className = 'btn small'
+              dl.style.textDecoration = 'none'
+              dl.style.display = 'inline-flex'
+              dl.style.alignItems = 'center'
+              dl.setAttribute('download', s)
+              controlsWrap.appendChild(dl)
+              div.appendChild(meta)
+              div.appendChild(waveContainer)
+              div.appendChild(controlsWrap)
+              stemsEl.appendChild(div)
+
+              const wave = createWave(waveContainer, colorMap[s.split('.')[0]] || '#7c5cff', 60)
+              stemWaves.push(wave)
+              wave.load(url)
+              playBtn.addEventListener('click', ()=>{
+                if (wave.isPlaying()) { wave.pause(); playBtn.textContent='Play' }
+                else { wave.play(); playBtn.textContent='Pause' }
+              })
+              // mute
+              muteBtn.addEventListener('click', ()=>{
+                const isMuted = wave.getVolume() === 0
+                wave.setVolume(isMuted ? 1 : 0)
+                muteBtn.textContent = isMuted ? 'Mute' : 'Unmute'
+              })
+              // solo
+              soloBtn.addEventListener('click', ()=>{
+                const soloing = soloBtn.dataset.soloed === '1'
+                if (!soloing){
+                  // reset other solo buttons
+                  document.querySelectorAll('.solo-btn').forEach(b=>{ b.dataset.soloed='0'; b.textContent='Solo'; b.classList.remove('active') })
+                  // set this as solo
+                  document.querySelectorAll('.mute-btn').forEach(b=> b.textContent='Mute')
+                  soloBtn.dataset.soloed = '1'
+                  soloBtn.textContent = 'Unsolo'
+                  soloBtn.classList.add('active')
+                  stemWaves.forEach(w=>{ if (w!==wave) w.setVolume(0); else w.setVolume(1) })
+                } else {
+                  // un-solo: restore volumes
+                  document.querySelectorAll('.solo-btn').forEach(b=>{ b.dataset.soloed='0'; b.textContent='Solo'; b.classList.remove('active') })
+                  stemWaves.forEach(w=> w.setVolume(1))
+                }
+              })
+            }
+            // sync mainWave duration with stem waves if available
+            if (mainWave){
+              mainWave.on('ready', ()=>{
+                // format duration
+                document.getElementById('timeDuration').textContent = formatTime(mainWave.getDuration()||0)
+              })
+            }
+          }
+        }catch(e){ statusEl.textContent = 'Status failed: '+e.message; uploadBtn.disabled=false }
+      }
+
+      function formatTime(t){
+        if (!t) return '0:00'
+        t = Math.max(0, Math.floor(t))
+        const m = Math.floor(t/60)
+        const s = t%60
+        return `${m}:${s.toString().padStart(2,'0')}`
+      }
+    </script>
+  </body>
+</html>

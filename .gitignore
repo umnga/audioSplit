@@ -6,6 +6,7 @@ __pycache__/
 
 # Virtual environments
 .venv/
+venv/
 
 # Editor / IDE
 .vscode/
@@ -32,13 +33,41 @@ node_modules/
 dist/
 .parcel-cache
 
+# Frontend (vite/react) artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+
 # Jupyter
 .ipynb_checkpoints/
 
 # OS
 Thumbs.db
+*.DS_Store
 
 # Large model / checkpoints
 *.th
 models/
-GITIGNORE
+
+# Project media and outputs
+uploads/
+separated/
+
+# Caches
+.cache/
+.cache/torch/
+.cache/torch/hub/
+
+# Logs and databases
+*.log
+*.sqlite3
+
+# Local env files
+.env.local
+.env.*
+
+# Python tooling
+.mypy_cache/
+__pypackages__/
+
