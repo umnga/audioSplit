@@ -5,7 +5,7 @@ from demucs.apply import apply_model
 import soundfile as sf
 import torchaudio
 
-def separate_audio(input_file, output_dir="separated"):
+def separate_audio(input_file, output_dir="separated", verbose=True):
     """
     Separate audio into stems using Demucs
     """
@@ -13,14 +13,18 @@ def separate_audio(input_file, output_dir="separated"):
 
     os.makedirs(output_dir, exist_ok=True)
     
-    print(f"Processing: {input_file}")
+    if verbose:
+        print(f"Processing: {input_file}")
     
-    print("Loading model...")
-    model = pretrained.get_model('htdemucs')
+    if verbose:
+        print("Loading model...")
+    # Use mdx_extra for faster processing (good quality, much faster than htdemucs)
+    model = pretrained.get_model('mdx_extra')
     model.to(device)
     model.eval()
     
-    print("Loading audio...")
+    if verbose:
+        print("Loading audio...")
     wav, sr = sf.read(input_file)
     import numpy as np
     if wav.ndim == 1:
@@ -30,7 +34,8 @@ def separate_audio(input_file, output_dir="separated"):
         wav = torchaudio.functional.resample(wav, sr, model.samplerate)
     wav = wav.unsqueeze(0).to(device)
 
-    print("Separating audio... this may take a few minutes")
+    if verbose:
+        print("Separating audio... this may take a few minutes")
     with torch.no_grad():
         sources = apply_model(model, wav)
     
@@ -39,12 +44,14 @@ def separate_audio(input_file, output_dir="separated"):
     source_names = model.sources
     
     for i, name in enumerate(source_names):
-        output_file = os.path.join(output_dir, f"{name}.mp3")
+        output_file = os.path.join(output_dir, f"{name}.wav")
         # sources[0, i] is (channels, samples), torchaudio expects (channels, samples)
         torchaudio.save(output_file, sources[0, i], model.samplerate)
-        print(f"Saved: {output_file}")
+        if verbose:
+            print(f"Saved: {output_file}")
     
-    print("Separation complete!")
+    if verbose:
+        print("Separation complete!")
 
 if __name__ == "__main__":
     input_file = "test_song.mp3"

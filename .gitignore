@@ -30,11 +30,16 @@ pip-wheel-metadata/
 # Node / frontend
 node_modules/
 .next/
+out/
 dist/
 .parcel-cache
+*.tsbuildinfo
+next-env.d.ts
 
-# Frontend (vite/react) artifacts
+# Frontend specific
 frontend/node_modules/
+frontend/.next/
+frontend/out/
 frontend/dist/
 frontend/.vite/
 
@@ -53,6 +58,11 @@ models/
 # Project media and outputs
 uploads/
 separated/
+mixed/
+karaoke/
+*.mp3
+*.wav
+!test_song.mp3
 
 # Caches
 .cache/

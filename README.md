@@ -1,25 +1,45 @@
-# audioSplit
+# AudioSplit Pro
 
-Small project to separate music stems using Demucs.
+Professional audio processing web application built with Next.js and FastAPI.
 
-Backend Quickstart
+## Features
 
-1. Activate the project virtualenv (created previously):
+- 🎼 **Separate** - Split audio into stems (vocals, drums, bass, other)
+- 🎚️ **Mix** - Combine multiple audio files into one
+- 🎤 **Karaoke** - Remove vocals to create instrumental tracks
 
-```bash
-source venv/bin/activate
-```
+## Setup
 
-2. Install backend requirements (if needed):
-
-```bash
-pip install -r backend/requirements.txt
-```
-
-3. Start the FastAPI server from the repo root (use the venv python):
+### Backend (FastAPI)
 
 ```bash
-uvicorn backend.app:app --reload --port 8000
+cd backend
+pip install -r requirements.txt
+uvicorn app:app --reload --port 8000
 ```
 
-4. Open http://127.0.0.1:8000/ to access the simple upload page.
+### Frontend (Next.js)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend will be available at http://localhost:3000
+The backend API will be available at http://localhost:8000
+
+## Requirements
+
+- Python 3.8+ with venv activated (demucs, torch, torchaudio, soundfile installed)
+- Node.js 18+
+- ffmpeg (for audio processing)
+
+## Usage
+
+1. Start the backend server
+2. Start the frontend development server
+3. Open http://localhost:3000 in your browser
+4. Select a mode and upload your audio files
+5. Wait for processing to complete
+6. Download or play the results
